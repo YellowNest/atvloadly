@@ -144,7 +144,18 @@
                     >
                     <div class="inline-flex">
                       <div class="atv-app-icon relative flex items-center justify-center">
-                        <img :src="iconUrl(item)" :alt="appName(item)" loading="lazy" />
+                        <img
+                          v-if="!failedIcons[item.ID]"
+                          :src="iconUrl(item)"
+                          :alt="appName(item)"
+                          @error="markIconFailed(item.ID)"
+                          loading="lazy"
+                        />
+                        <span
+                          v-else
+                          class="atv-app-initial"
+                          :aria-label="appName(item)"
+                        >{{ (appName(item) || "?").charAt(0).toUpperCase() }}</span>
                         <div
                           class="absolute w-full h-full top-0 flex items-center justify-center bg-[#00000066] rounded"
                           v-show="isInstalling(item)"
@@ -282,6 +293,7 @@ export default {
       newInstallToastId: null,
       sortKey: "",
       sortOrder: "asc",
+      failedIcons: {},
     };
   },
   computed: {
@@ -581,6 +593,9 @@ export default {
         }
       }
       return false;
+    },
+    markIconFailed(id) {
+      this.failedIcons[id] = true;
     },
     iconUrl(app) {
       if (app.icon) {
