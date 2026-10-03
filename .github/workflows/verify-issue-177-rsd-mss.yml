@@ -98,13 +98,13 @@ jobs:
       - name: Test affected idevice feature set
         run: |
           cargo test --manifest-path idevice/idevice/Cargo.toml \
-            --features "remote_pairing,tunnel_tcp_stack,rsd,afc,installation_proxy,ring" \
+            --features "full,ring" \
             tunnel_mss_tests -- --nocapture
 
       - name: Check affected idevice feature set
         run: |
           cargo check --manifest-path idevice/idevice/Cargo.toml \
-            --features "remote_pairing,tunnel_tcp_stack,rsd,afc,installation_proxy,ring"
+            --features "full,ring"
 
       - name: Clone exact PlumeImpactor release
         run: |
