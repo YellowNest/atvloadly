@@ -1,0 +1,129 @@
+name: "🔬 Issue 177 RSD MSS verification"
+
+on:
+  push:
+    branches:
+      - "verify/issue-177-rsd-mss"
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Check Rust
+        run: |
+          rustc --version
+          cargo --version
+
+      - name: Clone exact idevice dependency
+        run: |
+          git clone https://github.com/bitxeno/idevice.git idevice
+          git -C idevice checkout c6acb6f5fcd5a44cdc7fe694aea70b039b2500cb
+
+      - name: Verify current oversized MSS path
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          mod = Path("idevice/idevice/src/remote_pairing/mod.rs").read_text()
+          tunnel = Path("idevice/idevice/src/remote_pairing/tunnel.rs").read_text()
+
+          assert 'const DEFAULT_MTU: u16 = 16000;' in tunnel
+          assert 'adapter.set_mss(mtu.saturating_sub(60));' in mod
+
+          requested_mtu = 16000
+          current_mss = requested_mtu - 60
+          assert current_mss == 15940
+
+          print(f"Current path: MTU {requested_mtu} -> TCP MSS {current_mss}")
+          PY
+
+      - name: Apply safe RSD tunnel MSS cap and regression tests
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p = Path("idevice/idevice/src/remote_pairing/mod.rs")
+          s = p.read_text()
+
+          old_const = 'const WIRE_PROTOCOL_VERSION: u8 = 19;'
+          new_const = '''const WIRE_PROTOCOL_VERSION: u8 = 19;
+
+          // CoreDevice tunnel forwarding can black-hole large host-to-device TCP
+          // segments under sustained load. Keep the initial payload at the
+          // cross-device safe size used by other CoreDevice implementations.
+          const SAFE_TUNNEL_TCP_MSS: usize = 1340;
+
+          fn tunnel_tcp_mss(mtu: usize) -> usize {
+              mtu.saturating_sub(60).min(SAFE_TUNNEL_TCP_MSS)
+          }'''
+          assert s.count(old_const) == 1
+          s = s.replace(old_const, new_const)
+
+          old_set = 'adapter.set_mss(mtu.saturating_sub(60));'
+          new_set = 'adapter.set_mss(tunnel_tcp_mss(mtu));'
+          assert s.count(old_set) == 1
+          s = s.replace(old_set, new_set)
+
+          s += r'''
+
+          #[cfg(test)]
+          mod tunnel_mss_tests {
+              use super::tunnel_tcp_mss;
+
+              #[test]
+              fn caps_large_coredevice_tunnel_mtu() {
+                  assert_eq!(tunnel_tcp_mss(16_000), 1_340);
+                  assert_eq!(tunnel_tcp_mss(8_192), 1_340);
+                  assert_eq!(tunnel_tcp_mss(1_400), 1_340);
+              }
+
+              #[test]
+              fn respects_smaller_negotiated_mtu() {
+                  assert_eq!(tunnel_tcp_mss(1_280), 1_220);
+                  assert_eq!(tunnel_tcp_mss(1_000), 940);
+              }
+          }
+          '''
+          p.write_text(s)
+          PY
+
+          cargo fmt --manifest-path idevice/Cargo.toml --all -- --check || {
+            cargo fmt --manifest-path idevice/Cargo.toml --all
+          }
+          git -C idevice diff --check
+          git -C idevice diff
+
+      - name: Test affected idevice feature set
+        run: |
+          cargo test --manifest-path idevice/idevice/Cargo.toml \
+            --features "remote_pairing,tunnel_tcp_stack,rsd,afc,installation_proxy,ring" \
+            tunnel_mss_tests -- --nocapture
+
+      - name: Check affected idevice feature set
+        run: |
+          cargo check --manifest-path idevice/idevice/Cargo.toml \
+            --features "remote_pairing,tunnel_tcp_stack,rsd,afc,installation_proxy,ring"
+
+      - name: Clone exact PlumeImpactor release
+        run: |
+          git clone --branch v2.2.3-patch.6 --depth 1 https://github.com/bitxeno/PlumeImpactor.git PlumeImpactor
+
+      - name: Point PlumeImpactor at patched local idevice
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p = Path("PlumeImpactor/Cargo.toml")
+          s = p.read_text()
+          old = '''idevice = { git = "https://github.com/bitxeno/idevice", branch = "develop", features = ['''
+          new = '''idevice = { path = "../idevice/idevice", features = ['''
+          assert s.count(old) == 1
+          p.write_text(s.replace(old, new))
+          PY
+          git -C PlumeImpactor diff --check
+
+      - name: Compile plumesign against patched idevice
+        run: |
+          cargo check --manifest-path PlumeImpactor/Cargo.toml -p plumesign
