@@ -101,11 +101,6 @@ jobs:
             --features "full,ring" \
             tunnel_mss_tests -- --nocapture
 
-      - name: Check affected idevice feature set
-        run: |
-          cargo check --manifest-path idevice/idevice/Cargo.toml \
-            --features "full,ring"
-
       - name: Clone exact PlumeImpactor release
         run: |
           git clone --branch v2.2.3-patch.6 --depth 1 https://github.com/bitxeno/PlumeImpactor.git PlumeImpactor
