@@ -19,8 +19,8 @@ func TestLoginWriteToActivePipe(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer reader.Close()
-	defer writer.Close()
+	defer func() { _ = reader.Close() }()
+	defer func() { _ = writer.Close() }()
 
 	mgr := &LoginManager{stdin: writer}
 	mgr.Write([]byte("123456\n"))
@@ -38,7 +38,7 @@ func TestLoginWriteConcurrentShutdown(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer reader.Close()
+	defer func() { _ = reader.Close() }()
 	mgr := &LoginManager{stdin: writer}
 
 	var wg sync.WaitGroup
