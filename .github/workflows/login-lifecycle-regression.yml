@@ -29,4 +29,4 @@ jobs:
       - name: Login lifecycle race detector
         run: go test -race ./internal/manager ./internal/service -count=1
       - name: All Go unit tests
-        run: go test ./... -count=1
+        run: go test -p 1 ./... -count=1
