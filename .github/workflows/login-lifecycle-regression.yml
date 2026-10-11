@@ -13,12 +13,20 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/static/package-lock.json
+      - name: Build embedded frontend
+        working-directory: web/static
+        run: npm ci && npm run build
       - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
           cache: true
-      - name: Unit tests
-        run: go test ./... -count=1
       - name: Login lifecycle race detector
         run: go test -race ./internal/manager ./internal/service -count=1
+      - name: All Go unit tests
+        run: go test ./... -count=1
