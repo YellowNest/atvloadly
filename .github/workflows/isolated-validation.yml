@@ -1,0 +1,31 @@
+name: Isolated validation login
+on:
+  push:
+    branches:
+      - test/login-lifecycle-ci
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/static/package-lock.json
+      - name: Build embedded frontend
+        working-directory: web/static
+        run: npm ci && npm test && npm run build
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Race detector
+        run: go test -race ./internal/manager ./internal/service -count=1
+      - name: Go unit tests
+        run: go test -p 1 ./internal/... -count=1
