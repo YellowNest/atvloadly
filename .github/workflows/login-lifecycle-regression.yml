@@ -1,0 +1,24 @@
+name: Login lifecycle regression
+on:
+  push:
+    branches:
+      - fix/login-lifecycle-ci-verification
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  go:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Unit tests
+        run: go test ./... -count=1
+      - name: Login lifecycle race detector
+        run: go test -race ./internal/manager ./internal/service -count=1
