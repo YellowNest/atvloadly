@@ -1,0 +1,53 @@
+name: PR244 amd64 race verification
+
+on:
+  push:
+    branches:
+      - ci/pr244-amd64-race-20261029
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout exact PR244 commit
+        uses: actions/checkout@v4
+        with:
+          ref: 63620995b9007c53e81446192c6b4b69a96aac8c
+          persist-credentials: false
+      - name: Verify source revision and architecture
+        run: |
+          test "$(git rev-parse HEAD)" = "63620995b9007c53e81446192c6b4b69a96aac8c"
+          uname -m
+          test "$(uname -m)" = "x86_64"
+      - name: Set up Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: web/static/package-lock.json
+      - name: Build production frontend
+        working-directory: web/static
+        run: |
+          npm ci --no-audit --no-fund
+          npm test
+          npm run build
+      - name: Set up Go 1.25
+        uses: actions/setup-go@v6
+        with:
+          go-version: "1.25.x"
+          cache: true
+      - name: Full Go test suite under race detector
+        env:
+          CGO_ENABLED: "1"
+        run: go test -race -count=1 -timeout=10m -p 2 ./...
+      - name: Repeat deletion regression tests with race detector
+        env:
+          CGO_ENABLED: "1"
+        run: |
+          go test -race -count=10 -timeout=10m -p 2 \
+            -run '^Test(DeleteAppOnlyRemovesOwnedDirectory|DeleteAppWithoutStorageRootKeepsRecord|DeleteSigningIdentity)$' \
+            ./internal/service
