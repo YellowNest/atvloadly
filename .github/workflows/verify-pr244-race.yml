@@ -1,6 +1,7 @@
 name: PR244 amd64 race verification
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - ci/pr244-amd64-race-20261029
